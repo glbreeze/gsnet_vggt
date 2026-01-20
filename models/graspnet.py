@@ -37,24 +37,27 @@ class GraspNet(nn.Module):
         self.swad = SWADNet(num_angle=self.num_angle, num_depth=self.num_depth)
 
     def forward(self, end_points):
-        seed_xyz = end_points['point_clouds']  # use all sampled point cloud, B*Ns*3
+        seed_xyz = end_points['point_clouds']  # use all sampled point cloud, B*Ns*3,  [4, 15000, 3]
         B, point_num, _ = seed_xyz.shape  # batch _size
         # point-wise features
-        coordinates_batch = end_points['coors']
-        features_batch = end_points['feats']
-        mink_input = ME.SparseTensor(features_batch, coordinates=coordinates_batch)
-        seed_features = self.backbone(mink_input).F
-        seed_features = seed_features[end_points['quantize2original']].view(B, point_num, -1).transpose(1, 2)
+        coordinates_batch = end_points['coors'] # [33545, 4] 31859-> num of occupied voxels, 4 cols ->  batch_idx, x_voxel, y_voxel, z_voxel
+        features_batch = end_points['feats']    # [33545, 3]
 
-        end_points = self.graspable(seed_features, end_points)
-        seed_features_flipped = seed_features.transpose(1, 2)  # B*Ns*feat_dim
+        mink_input = ME.SparseTensor(features_batch, coordinates=coordinates_batch)  # [33545, 3]
+        seed_features = self.backbone(mink_input).F                                      # [33545, 512]
+        seed_features = seed_features[end_points['quantize2original']].view(B, point_num, -1).transpose(1, 2) #[4, 512, 15000]
+
+        # ---------------- Point-wise graspability heads  ---------------- 
+        end_points = self.graspable(seed_features, end_points)  # add objectness_score, graspness_score
+        seed_features_flipped = seed_features.transpose(1, 2)  # B*Ns*feat_dim [4, 15000, 512]
         objectness_score = end_points['objectness_score']
         graspness_score = end_points['graspness_score'].squeeze(1)
         objectness_pred = torch.argmax(objectness_score, 1)
         objectness_mask = (objectness_pred == 1)
         graspness_mask = graspness_score > GRASPNESS_THRESHOLD
-        graspable_mask = objectness_mask & graspness_mask
+        graspable_mask = objectness_mask & graspness_mask # [4, 15000]
 
+        #  ----------------  FPS downsample to fixed M points  ---------------- 
         seed_features_graspable = []
         seed_xyz_graspable = []
         graspable_num_batch = 0.
@@ -66,8 +69,8 @@ class GraspNet(nn.Module):
 
             cur_seed_xyz = cur_seed_xyz.unsqueeze(0) # 1*Ns*3
             fps_idxs = furthest_point_sample(cur_seed_xyz, self.M_points)
-            cur_seed_xyz_flipped = cur_seed_xyz.transpose(1, 2).contiguous()  # 1*3*Ns
-            cur_seed_xyz = gather_operation(cur_seed_xyz_flipped, fps_idxs).transpose(1, 2).squeeze(0).contiguous() # Ns*3
+            cur_seed_xyz_flipped = cur_seed_xyz.transpose(1, 2).contiguous()  # 1*3*Ns [1, 3, 185]
+            cur_seed_xyz = gather_operation(cur_seed_xyz_flipped, fps_idxs).transpose(1, 2).squeeze(0).contiguous() # Ns*3 [1024, 3]
             cur_feat_flipped = cur_feat.unsqueeze(0).transpose(1, 2).contiguous()  # 1*feat_dim*Ns
             cur_feat = gather_operation(cur_feat_flipped, fps_idxs).squeeze(0).contiguous() # feat_dim*Ns
 
@@ -78,7 +81,8 @@ class GraspNet(nn.Module):
         end_points['xyz_graspable'] = seed_xyz_graspable
         end_points['graspable_count_stage1'] = graspable_num_batch / B
 
-        end_points, res_feat = self.rotation(seed_features_graspable, end_points)
+        #  ----------------  Approach direction (view) prediction  ---------------- 
+        end_points, res_feat = self.rotation(seed_features_graspable, end_points) # add 'view_score', 'grasp_top_view_inds'
         seed_features_graspable = seed_features_graspable + res_feat
 
         if self.is_training:

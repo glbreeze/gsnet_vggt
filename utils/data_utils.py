@@ -18,7 +18,7 @@ class CameraInfo():
         self.scale = scale
 
 
-def create_point_cloud_from_depth_image(depth, camera, organized=True):
+def create_point_cloud_from_depth_image(depth, camera, organized=True, ret_uv=False):
     """ Generate point cloud using depth image only.
 
         Input:
@@ -37,12 +37,20 @@ def create_point_cloud_from_depth_image(depth, camera, organized=True):
     xmap = np.arange(camera.width)
     ymap = np.arange(camera.height)
     xmap, ymap = np.meshgrid(xmap, ymap)
+    
     points_z = depth / camera.scale
     points_x = (xmap - camera.cx) * points_z / camera.fx
     points_y = (ymap - camera.cy) * points_z / camera.fy
+    
     cloud = np.stack([points_x, points_y, points_z], axis=-1)
+    uv = np.stack([xmap, ymap], axis=-1)
+    
     if not organized:
         cloud = cloud.reshape([-1, 3])
+        uv = uv.reshape(-1, 2)
+    
+    if ret_uv:
+        return cloud, uv
     return cloud
 
 

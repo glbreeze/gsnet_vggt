@@ -36,26 +36,29 @@ class ApproachNet(nn.Module):
         self.conv2 = nn.Conv1d(self.in_dim, self.num_view, 1)
 
     def forward(self, seed_features, end_points):
-        B, _, num_seed = seed_features.size()
+        import pdb; pdb.set_trace()
+        B, _, num_seed = seed_features.size() # [4, 512, 1024]
         res_features = F.relu(self.conv1(seed_features), inplace=True)
         features = self.conv2(res_features)
-        view_score = features.transpose(1, 2).contiguous() # (B, num_seed, num_view)
+        view_score = features.transpose(1, 2).contiguous() # (B, num_seed, num_view) [4, 1024, 300]
         end_points['view_score'] = view_score
 
         if self.is_training:
+            # ----------- each seed point, consider V/300 approach directions -----------
             # normalize view graspness score to 0~1
-            view_score_ = view_score.clone().detach()
-            view_score_max, _ = torch.max(view_score_, dim=2)
-            view_score_min, _ = torch.min(view_score_, dim=2)
+            view_score_ = view_score.clone().detach()          # [4, 1024, 300]
+            view_score_max, _ = torch.max(view_score_, dim=2)  # [4, 1024]
+            view_score_min, _ = torch.min(view_score_, dim=2)  # [4, 1024]
             view_score_max = view_score_max.unsqueeze(-1).expand(-1, -1, self.num_view)
             view_score_min = view_score_min.unsqueeze(-1).expand(-1, -1, self.num_view)
             view_score_ = (view_score_ - view_score_min) / (view_score_max - view_score_min + 1e-8)
 
+            #  ----------- Sample ONE view per point (Prob ∝ normalized view score)  ----------- 
             top_view_inds = []
             for i in range(B):
                 top_view_inds_batch = torch.multinomial(view_score_[i], 1, replacement=False)
                 top_view_inds.append(top_view_inds_batch)
-            top_view_inds = torch.stack(top_view_inds, dim=0).squeeze(-1)  # B, num_seed
+            top_view_inds = torch.stack(top_view_inds, dim=0).squeeze(-1)  # B, num_seed [4, 1024]
         else:
             _, top_view_inds = torch.max(view_score, dim=2)  # (B, num_seed)
 
