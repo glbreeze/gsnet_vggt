@@ -35,6 +35,8 @@ parser.add_argument('--max_epoch', type=int, default=10, help='Epoch to run [def
 parser.add_argument('--batch_size', type=int, default=4, help='Batch Size during training [default: 2]')
 parser.add_argument('--learning_rate', type=float, default=0.001, help='Initial learning rate [default: 0.001]')
 parser.add_argument('--resume', action='store_true', default=False, help='Whether to resume from checkpoint')
+parser.add_argument('--vggt_feat', type=str, default=None, help='where to extract vggt feature')
+parser.add_argument('--vggt_fuse', type=str, default=None, help='how to use vggt feature')
 cfgs = parser.parse_args()
 # ------------------------------------------------------------------------- GLOBAL CONFIG BEG
 EPOCH_CNT = 0
@@ -68,7 +70,7 @@ TRAIN_DATALOADER = DataLoader(TRAIN_DATASET, batch_size=cfgs.batch_size, shuffle
 
 print('train dataloader length: ', len(TRAIN_DATALOADER))
 
-net = GraspNet(seed_feat_dim=cfgs.seed_feat_dim, is_training=True)
+net = GraspNet(seed_feat_dim=cfgs.seed_feat_dim, is_training=True, vggt=cfgs.vggt_fuse)
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 net.to(device)
 # Load the Adam optimizer
@@ -105,7 +107,6 @@ def train_one_epoch():
     adjust_learning_rate(optimizer, EPOCH_CNT)
     net.train()
     batch_interval = 20
-    import pdb; pdb.set_trace()
     for batch_idx, batch_data_label in enumerate(TRAIN_DATALOADER):
         for key in batch_data_label:
             if 'list' in key:
@@ -132,7 +133,7 @@ def train_one_epoch():
         dtype = torch.bfloat16 if torch.cuda.get_device_capability()[0] >= 8 else torch.float16
         with torch.no_grad():
             with torch.cuda.amp.autocast(dtype=dtype):
-                predictions = vggt_model(images, sg_feat = 'interp') # 'interp': after interploation, 'pos': after adding pos embedding
+                predictions = vggt_model(images, sg_feat = cfgs.vggt_feat) # 'interp': after interploation, 'pos': after adding pos embedding
                 sg_feature = predictions['sg_feature']
 
         # ------------ Sample VGGT features -------------

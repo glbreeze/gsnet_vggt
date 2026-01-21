@@ -21,7 +21,7 @@ from pointnet2.pointnet2_utils import furthest_point_sample, gather_operation
 
 
 class GraspNet(nn.Module):
-    def __init__(self, cylinder_radius=0.05, seed_feat_dim=512, is_training=True):
+    def __init__(self, cylinder_radius=0.05, seed_feat_dim=512, is_training=True, vggt=None):
         super().__init__()
         self.is_training = is_training
         self.seed_feature_dim = seed_feat_dim
@@ -35,8 +35,17 @@ class GraspNet(nn.Module):
         self.rotation = ApproachNet(self.num_view, seed_feature_dim=self.seed_feature_dim, is_training=self.is_training)
         self.crop = CloudCrop(nsample=16, cylinder_radius=cylinder_radius, seed_feature_dim=self.seed_feature_dim)
         self.swad = SWADNet(num_angle=self.num_angle, num_depth=self.num_depth)
+        self.vggt = vggt
+        if vggt is not None:
+            input_dim = seed_feat_dim + 128 if vggt == 'fuse' else 128
+            self.vggt_proj = nn.Sequential(
+                nn.Conv1d(input_dim, seed_feat_dim, kernel_size=1),
+                nn.BatchNorm1d(seed_feat_dim), 
+                nn.ReLU(inplace=True)
+                )
 
     def forward(self, end_points):
+        import pdb; pdb.set_trace()
         seed_xyz = end_points['point_clouds']  # use all sampled point cloud, B*Ns*3,  [4, 15000, 3]
         B, point_num, _ = seed_xyz.shape  # batch _size
         # point-wise features
@@ -46,6 +55,18 @@ class GraspNet(nn.Module):
         mink_input = ME.SparseTensor(features_batch, coordinates=coordinates_batch)  # [33545, 3]
         seed_features = self.backbone(mink_input).F                                      # [33545, 512]
         seed_features = seed_features[end_points['quantize2original']].view(B, point_num, -1).transpose(1, 2) #[4, 512, 15000]
+        
+        # ---------------- decide how I deal with VGGT features ------------
+        if self.vggt is not None:
+            sg_features = end_points['sg_features']  # [B, N, 128]
+            sg_features = sg_features.transpose(1, 2)  # [B, 128, N]
+
+            if self.vggt == 'fuse':
+                seed_features = torch.cat([seed_features, sg_features], dim=1)  # [B, 640, N]
+            elif self.vggt == 'replace':
+                seed_features = sg_features  # [B, 128, N]
+            seed_features = self.vggt_proj(seed_features)    
+
 
         # ---------------- Point-wise graspability heads  ---------------- 
         end_points = self.graspable(seed_features, end_points)  # add objectness_score, graspness_score
@@ -67,7 +88,7 @@ class GraspNet(nn.Module):
             cur_feat = seed_features_flipped[i][cur_mask]  # Ns*feat_dim
             cur_seed_xyz = seed_xyz[i][cur_mask]  # Ns*3
 
-            cur_seed_xyz = cur_seed_xyz.unsqueeze(0) # 1*Ns*3
+            cur_seed_xyz = cur_seed_xyz.unsqueeze(0).float() # 1*Ns*3
             fps_idxs = furthest_point_sample(cur_seed_xyz, self.M_points)
             cur_seed_xyz_flipped = cur_seed_xyz.transpose(1, 2).contiguous()  # 1*3*Ns [1, 3, 185]
             cur_seed_xyz = gather_operation(cur_seed_xyz_flipped, fps_idxs).transpose(1, 2).squeeze(0).contiguous() # Ns*3 [1024, 3]

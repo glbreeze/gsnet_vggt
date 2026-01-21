@@ -23,7 +23,7 @@ class GraspNetDataset(Dataset):
         assert (num_points <= 50000)
         self.root = root
         self.split = split
-        self.voxel_size = voxel_size
+        self.voxel_size = np.float32(voxel_size)
         self.num_points = num_points
         self.remove_outlier = remove_outlier
         self.grasp_labels = grasp_labels
