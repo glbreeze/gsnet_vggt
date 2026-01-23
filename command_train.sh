@@ -12,7 +12,9 @@ export PIP_DISABLE_PEP517=1
 
 
 
-CUDA_VISIBLE_DEVICES=4 
+# generate graspness 
+nohup python dataset/generate_graspness.py --dataset_root /home/asus/Research/datasets/graspnet --camera_type kinect > graspness.log 2>&1 &
+python generate_graspness.py --dataset_root /home/asus/Research/datasets/graspnet --camera_type kinect
 
 
 export LD_LIBRARY_PATH="$CONDA_PREFIX/lib:$LD_LIBRARY_PATH"
@@ -25,6 +27,10 @@ python tp.py --camera kinect --log_dir logs/log_kn --batch_size 4 --learning_rat
 --model_name minkuresunet --dataset_root /home/asus/Research/datasets/graspnet
 
 
+nohup bash -c '
+export OMP_NUM_THREADS=28   # for CPU computations
+export MKL_NUM_THREADS=28   # for linear algebra libraries
 export LD_LIBRARY_PATH="$CONDA_PREFIX/lib:$LD_LIBRARY_PATH"
 python train_vggt.py --camera kinect --log_dir logs/log_kn --batch_size 4 --learning_rate 0.001 \
---model_name minkuresunet --dataset_root /home/asus/Research/datasets/graspnet
+--model_name minkuresunet --dataset_root /home/asus/Research/datasets/graspnet --vggt_feat interp --vggt_fuse fuse
+' < /dev/null > vggt_train.log 2>&1 &

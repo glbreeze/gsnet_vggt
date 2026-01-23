@@ -27,7 +27,7 @@ if __name__ == '__main__':
     num_views, num_angles, num_depths = 300, 12, 4
     fric_coef_thresh = 0.8
     point_grasp_num = num_views * num_angles * num_depths
-    for scene_id in range(60, 100):
+    for scene_id in range(100, 130):
         save_path = os.path.join(save_path_root, 'scene_' + str(scene_id).zfill(4), camera_type)
         if not os.path.exists(save_path):
             os.makedirs(save_path)

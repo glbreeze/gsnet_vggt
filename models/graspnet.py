@@ -45,7 +45,6 @@ class GraspNet(nn.Module):
                 )
 
     def forward(self, end_points):
-        import pdb; pdb.set_trace()
         seed_xyz = end_points['point_clouds']  # use all sampled point cloud, B*Ns*3,  [4, 15000, 3]
         B, point_num, _ = seed_xyz.shape  # batch _size
         # point-wise features

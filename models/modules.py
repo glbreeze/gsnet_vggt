@@ -36,7 +36,6 @@ class ApproachNet(nn.Module):
         self.conv2 = nn.Conv1d(self.in_dim, self.num_view, 1)
 
     def forward(self, seed_features, end_points):
-        import pdb; pdb.set_trace()
         B, _, num_seed = seed_features.size() # [4, 512, 1024]
         res_features = F.relu(self.conv1(seed_features), inplace=True)
         features = self.conv2(res_features)
