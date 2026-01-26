@@ -62,6 +62,10 @@ TRAIN_DATASET = GraspNetDataset(cfgs.dataset_root, grasp_labels=grasp_labels, ca
 print('train dataset length: ', len(TRAIN_DATASET))
 TRAIN_DATALOADER = DataLoader(TRAIN_DATASET, batch_size=cfgs.batch_size, shuffle=True,
                               num_workers=0, worker_init_fn=my_worker_init_fn, collate_fn=minkowski_collate_fn)
+# dt = TRAIN_DATASET.__getitem__(0)
+# from dataset.graspnet_dataset import visualize_pointcloud_graspness_open3d, visualize_pointcloud_graspness_matplotlib
+# visualize_pointcloud_graspness_open3d(dt, mode="blend", blend_alpha=0.7)
+
 print('train dataloader length: ', len(TRAIN_DATALOADER))
 
 net = GraspNet(seed_feat_dim=cfgs.seed_feat_dim, is_training=True)
@@ -97,6 +101,7 @@ def train_one_epoch():
     adjust_learning_rate(optimizer, EPOCH_CNT)
     net.train()
     batch_interval = 20
+    #import pdb; pdb.set_trace()
     for batch_idx, batch_data_label in enumerate(TRAIN_DATALOADER):
         for key in batch_data_label:
             if 'list' in key:

@@ -37,9 +37,9 @@ parser.add_argument('--max_epoch', type=int, default=10, help='Epoch to run [def
 parser.add_argument('--batch_size', type=int, default=4, help='Batch Size during training [default: 2]')
 parser.add_argument('--learning_rate', type=float, default=0.001, help='Initial learning rate [default: 0.001]')
 parser.add_argument('--resume', action='store_true', default=False, help='Whether to resume from checkpoint')
-parser.add_argument('--vggt_feat', type=str, default=None, help='where to extract vggt feature')
-parser.add_argument('--vggt_fuse', type=str, default=None, help='how to use vggt feature')
-parser.add_argument('--proj_name', type=str, default='gasp_vggt', help='name for wandb project')
+parser.add_argument('--vggt_feat', type=str, default=None, help='where to extract vggt feature, used in vggt forward pass') # None | "interp" | "pos"
+parser.add_argument('--vggt_fuse', type=str, default=None, help='how to use vggt feature')  # replace | fuse | None
+parser.add_argument('--proj_name', type=str, default='grasp_vggt', help='name for wandb project')
 cfgs = parser.parse_args()
 cfgs.exp_name = (
     f"vggt_f{cfgs.vggt_fuse if cfgs.vggt_fuse is not None else 'n'}_"
@@ -123,7 +123,7 @@ def adjust_learning_rate(optimizer, epoch):
     for param_group in optimizer.param_groups:
         param_group['lr'] = lr
 
-def get_vgg_feat(batch_data_label):
+def get_vggt_feat(batch_data_label):
     # ----------- inputs -----------
     images = batch_data_label['image'].unsqueeze(1)  # [B, 1, 3, H, W]
     uv = batch_data_label['uv']         # [B, 15000, 2] 
@@ -159,7 +159,7 @@ def train_one_epoch(epoch_cnt=None):
     stat_dict = {}  # collect statistics
     adjust_learning_rate(optimizer, EPOCH_CNT)
     net.train()
-    batch_interval = 20
+    batch_interval = 40
     for batch_idx, batch_data_label in enumerate(TRAIN_DATALOADER):
         for key in batch_data_label:
             if 'list' in key:
@@ -170,7 +170,8 @@ def train_one_epoch(epoch_cnt=None):
                 batch_data_label[key] = batch_data_label[key].to(device)
 
         # ----------- get vggt features -----------
-        get_vgg_feat(batch_data_label)
+        if cfgs.vggt_fuse is not None:
+            get_vggt_feat(batch_data_label)
         
         # ------------ model training  ------------ 
         end_points = net(batch_data_label)
@@ -191,8 +192,8 @@ def train_one_epoch(epoch_cnt=None):
             train_metrics = {f'train/{key}': stat_dict[key] / batch_interval for key in stat_dict}
             wandb.log(train_metrics, step=epoch_cnt * len(TRAIN_DATALOADER) + batch_idx)
             
-            for key in sorted(train_metrics.keys()):
-                log_string('Train mean %s: %f' % (key, train_metrics[key]))
+            for key in sorted(stat_dict.keys()):
+                log_string('Train mean %s: %f' % (key, train_metrics[f'train/{key}']))
                 stat_dict[key] = 0
 
 
@@ -212,7 +213,9 @@ def evaluate_one_epoch(epoch_cnt=None):
             elif 'meta' not in key:
                 batch_data_label[key] = batch_data_label[key].to(device)
         
-        get_vgg_feat(batch_data_label)
+        # ----------- get vggt features -----------
+        if cfgs.vggt_fuse is not None:
+            get_vggt_feat(batch_data_label)
 
         with torch.no_grad():
             end_points = net(batch_data_label)

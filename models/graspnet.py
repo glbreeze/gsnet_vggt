@@ -102,7 +102,7 @@ class GraspNet(nn.Module):
         end_points['graspable_count_stage1'] = graspable_num_batch / B
 
         #  ----------------  Approach direction (view) prediction  ---------------- 
-        end_points, res_feat = self.rotation(seed_features_graspable, end_points) # add 'view_score', 'grasp_top_view_inds'
+        end_points, res_feat = self.rotation(seed_features_graspable, end_points) # add 'view_score', 'grasp_top_view_inds', sample direction based on view_score
         seed_features_graspable = seed_features_graspable + res_feat
 
         if self.is_training:
